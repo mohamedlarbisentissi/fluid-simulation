@@ -1,12 +1,5 @@
-struct data {
-    float* dx;
-    float* dt;
-    float* RT;
-    float* mu;
-    field f1;
-    field f2;
-    bool* inMain;
-};
+#ifndef STRUCTS_H
+#define STRUCTS_H
 
 struct field {
     float* p;
@@ -14,3 +7,16 @@ struct field {
     float* v;
     float* w;
 };
+
+struct data {
+    float* dx;
+    float* dt;
+    float* RT;
+    float* mu;
+    float* g;
+    field f1;
+    field f2;
+    bool* inMain;
+};
+
+#endif

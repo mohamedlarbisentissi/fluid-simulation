@@ -1,0 +1,70 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "Compile CUDA file",
+			"command": "/usr/bin/nvcc",
+			"args": [
+				//"-G",
+				"-O3",
+				"-arch=sm_75",
+				"-g",
+				"-c",
+				"kernel.cu",
+				"-o",
+				"kernel.o"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build",
+			"detail": "compiler: /usr/bin/nvcc"
+		},
+		{
+			"type": "cppbuild",
+			"label": "Compile C++ file",
+			"command": "/usr/bin/g++",
+			"args": [
+				"-O3",
+				"-g",
+				"-c",
+				"main.cpp",
+				"-o",
+				"main.o"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build",
+			"detail": "compiler: /usr/bin/g++"
+		},
+		{
+			"type": "cppbuild",
+			"label": "Link object files",
+			"command": "/usr/bin/g++",
+			"args": [
+				"kernel.o",
+				"main.o",
+				"-o",
+				"fluid_sim",
+				"-L/usr/local/cuda/lib64",
+				"-lcudart"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build",
+			"detail": "compiler: /usr/bin/g++"
+		}
+	]
+}

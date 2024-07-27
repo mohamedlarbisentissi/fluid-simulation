@@ -1,7 +1,12 @@
-#include <cuda_runtime.h>
+#ifndef KERNEL_H
+#define KERNEL_H
 
-void initializeValues(dim3 numBlocks, dim3 threadsPerBlock, data d, int side);
+#include "structs.h"
 
-void launchKernels(dim3 numBlocks, dim3 threadsPerBlock, data d, int side);
+void init(int numBlocks, int threadsPerBlock, data d, int side);
+
+void step(int numBlocks, int threadsPerBlock, data d, int side);
 
 void flipInMain(data d);
+
+#endif
