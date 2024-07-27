@@ -4,7 +4,8 @@
 #include "structs.h"
 
 int main() {
-    constexpr int side = 500;
+    //constexpr int side = 500;
+    // *** PYTHON CODE-GENERATED SIDE VALUE ***
     constexpr int size = side * side * side;
     int t = 0;
     data d;
@@ -28,7 +29,7 @@ int main() {
     init(numBlocks, threadsPerBlock, d, side);
     while (t < 2000) {
         std::cout << "t = " << t << std::endl;
-        step(numBlocks, threadsPerBlock, d, side);
+        step(d);
         flipInMain(d);
         t++;
     }
@@ -36,11 +37,6 @@ int main() {
     cudaFree(d.dx);
     cudaFree(d.dt);
     cudaFree(d.RT);
-    cudaFree(d.mu);
-    cudaFree(d.g);
-    cudaFree(d.f1.p);
-    cudaFree(d.f1.u);
-    cudaFree(d.f1.v);
     cudaFree(d.f1.w);
     cudaFree(d.f2.p);
     cudaFree(d.f2.u);

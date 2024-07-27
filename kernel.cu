@@ -28,6 +28,16 @@ void init(int numBlocks, int threadsPerBlock, data d, int side) {
     cudaDeviceSynchronize();
 }
 
+// Flip in main
+__global__ void flipInMainKernel(data d) {
+    *d.inMain = !*d.inMain;
+}
+
+void flipInMain(data d) {
+    flipInMainKernel<<<1, 1>>>(d);
+    cudaDeviceSynchronize();
+}
+
 // Update field
 __device__ float getDerivative(float* field, int requestCode, bool* boundaryFlags, 
     float dx, int index, int* extendedNeighbors) {
@@ -281,17 +291,10 @@ __global__ void updateField(data d, int side) {
     }
 }
 
-void step(int numBlocks, int threadsPerBlock, data d, int side) {
-    updateField<<<numBlocks, threadsPerBlock>>>(d, side);
-    cudaDeviceSynchronize();
-}
+// *** PYTHON CODE-GENERATED KERNEL DEFINITIONS ***
 
-// Flip in main
-__global__ void flipInMainKernel(data d) {
-    *d.inMain = !*d.inMain;
-}
-
-void flipInMain(data d) {
-    flipInMainKernel<<<1, 1>>>(d);
+void step(data d) {
+    //updateField<<<numBlocks, threadsPerBlock>>>(d, side);
+    // *** PYTHON CODE-GENERATED KERNEL CALLS ***
     cudaDeviceSynchronize();
 }
