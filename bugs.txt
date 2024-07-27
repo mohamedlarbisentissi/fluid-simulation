@@ -1,1 +1,0 @@
-Resolve 701 kernel launch error code

@@ -4,7 +4,7 @@
 #include "structs.h"
 
 int main() {
-    // *** PYTHON CODE-GENERATED SIDE VALUE ***
+    constexpr int side = 300;
     constexpr int size = side * side * side;
     int t = 0;
     data d;

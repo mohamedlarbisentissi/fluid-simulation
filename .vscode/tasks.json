@@ -6,12 +6,12 @@
 			"label": "Compile CUDA file",
 			"command": "/usr/bin/nvcc",
 			"args": [
-				//"-G",
+				"-G",
 				"-O3",
 				"-arch=sm_75",
 				"-g",
 				"-c",
-				"kernel.cu",
+				"kernel_w.cu",
 				"-o",
 				"kernel.o"
 			],
@@ -32,7 +32,7 @@
 				"-O3",
 				"-g",
 				"-c",
-				"main.cpp",
+				"main_w.cpp",
 				"-o",
 				"main.o"
 			],
