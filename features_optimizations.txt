@@ -1,1 +1,3 @@
+Use CMake to automate build
+Add dataReader and visualizer
 Consider running the loop inside the GPU in order to avoid kernel launch overhead

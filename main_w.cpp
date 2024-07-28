@@ -2,9 +2,11 @@
 #include <iostream>
 #include "kernel.h"
 #include "structs.h"
+#include "data_saver.h"
 
 int main() {
     constexpr int side = 300;
+    constexpr int SAVE_EVERY = 300; //ms
     constexpr int size = side * side * side;
     int t = 0;
     data d;
@@ -24,10 +26,15 @@ int main() {
     cudaMalloc(&d.inMain, sizeof(bool));
     int threadsPerBlock(1024);
     int numBlocks((size + threadsPerBlock - 1) / threadsPerBlock);
+    DataSaver dataSaver(side);
 
     init(numBlocks, threadsPerBlock, d, side);
     while (t < 2000) {
         std::cout << "t = " << t << std::endl;
+        if (t % SAVE_EVERY == 0) {
+            std::cout << "Saving data..." << std::endl;
+            dataSaver.saveData(t, d, side);
+        }
         step(d);
         flipInMain(d);
         t++;
