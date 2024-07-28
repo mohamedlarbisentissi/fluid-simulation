@@ -54,19 +54,19 @@ void flipInMain(data d) {
 
 __global__ void updateCore(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 26463592) return;
+    if(totalThreadIndex >= 512) return;
 
     // Compute indices
-    int x = (totalThreadIndex % 298) + 1;
-    int y = ((totalThreadIndex / 298) % 298) + 1;
-    int z = (totalThreadIndex / (298 * 298)) + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int x = (totalThreadIndex % 8) + 1;
+    int y = ((totalThreadIndex / 8) % 8) + 1;
+    int z = (totalThreadIndex / (8 * 8)) + 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
     // Define origin and destination fields
@@ -139,19 +139,19 @@ __global__ void updateCore(data d) {
 
 __global__ void updateFaceX1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 88804) return;
+    if(totalThreadIndex >= 64) return;
 
 
     int x = 0;
-    int y = (totalThreadIndex % 298) + 1;
-    int z = ((totalThreadIndex / 298) % 298) + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int y = (totalThreadIndex % 8) + 1;
+    int z = ((totalThreadIndex / 8) % 8) + 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -212,19 +212,19 @@ __global__ void updateFaceX1(data d) {
 
 __global__ void updateFaceX2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 88804) return;
+    if(totalThreadIndex >= 64) return;
 
 
-    int x = 299;
-    int y = (totalThreadIndex % 298) + 1;
-    int z = ((totalThreadIndex / 298) % 298) + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int x = 9;
+    int y = (totalThreadIndex % 8) + 1;
+    int z = ((totalThreadIndex / 8) % 8) + 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -285,19 +285,19 @@ __global__ void updateFaceX2(data d) {
 
 __global__ void updateFaceY1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 88804) return;
+    if(totalThreadIndex >= 64) return;
 
 
-    int x = (totalThreadIndex % 298) + 1;
+    int x = (totalThreadIndex % 8) + 1;
     int y = 0;
-    int z = ((totalThreadIndex / 298) % 298) + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ypp = x + (y+2) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int z = ((totalThreadIndex / 8) % 8) + 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -358,19 +358,19 @@ __global__ void updateFaceY1(data d) {
 
 __global__ void updateFaceY2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 88804) return;
+    if(totalThreadIndex >= 64) return;
 
 
-    int x = (totalThreadIndex % 298) + 1;
-    int y = 299;
-    int z = ((totalThreadIndex / 298) % 298) + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_ymm = x + (y-2) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int x = (totalThreadIndex % 8) + 1;
+    int y = 9;
+    int z = ((totalThreadIndex / 8) % 8) + 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -431,19 +431,19 @@ __global__ void updateFaceY2(data d) {
 
 __global__ void updateFaceZ1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 88804) return;
+    if(totalThreadIndex >= 64) return;
 
 
-    int x = (totalThreadIndex % 298) + 1;
-    int y = ((totalThreadIndex / 298) % 298) + 1;
+    int x = (totalThreadIndex % 8) + 1;
+    int y = ((totalThreadIndex / 8) % 8) + 1;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -503,19 +503,19 @@ __global__ void updateFaceZ1(data d) {
 
 __global__ void updateFaceZ2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 88804) return;
+    if(totalThreadIndex >= 64) return;
 
 
-    int x = (totalThreadIndex % 298) + 1;
-    int y = ((totalThreadIndex / 298) % 298) + 1;
-    int z = 299;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int x = (totalThreadIndex % 8) + 1;
+    int y = ((totalThreadIndex / 8) % 8) + 1;
+    int z = 9;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -575,19 +575,19 @@ __global__ void updateFaceZ2(data d) {
 
 __global__ void updateEdgeX1Y1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
     int x = 0;
     int y = 0;
     int z = totalThreadIndex + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ypp = x + (y+2) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -635,19 +635,19 @@ __global__ void updateEdgeX1Y1(data d) {
 
 __global__ void updateEdgeX1Y2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
     int x = 0;
-    int y = 299;
+    int y = 9;
     int z = totalThreadIndex + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_ymm = x + (y-2) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -695,19 +695,19 @@ __global__ void updateEdgeX1Y2(data d) {
 
 __global__ void updateEdgeX2Y1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
-    int x = 299;
+    int x = 9;
     int y = 0;
     int z = totalThreadIndex + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ypp = x + (y+2) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -755,19 +755,19 @@ __global__ void updateEdgeX2Y1(data d) {
 
 __global__ void updateEdgeX2Y2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
-    int x = 299;
-    int y = 299;
+    int x = 9;
+    int y = 9;
     int z = totalThreadIndex + 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_ymm = x + (y-2) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -815,19 +815,19 @@ __global__ void updateEdgeX2Y2(data d) {
 
 __global__ void updateEdgeX1Z1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
     int x = 0;
     int y = totalThreadIndex + 1;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -874,19 +874,19 @@ __global__ void updateEdgeX1Z1(data d) {
 
 __global__ void updateEdgeX1Z2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
     int x = 0;
     int y = totalThreadIndex + 1;
-    int z = 299;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int z = 9;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -933,19 +933,19 @@ __global__ void updateEdgeX1Z2(data d) {
 
 __global__ void updateEdgeX2Z1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
-    int x = 299;
+    int x = 9;
     int y = totalThreadIndex + 1;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -992,19 +992,19 @@ __global__ void updateEdgeX2Z1(data d) {
 
 __global__ void updateEdgeX2Z2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
-    int x = 299;
+    int x = 9;
     int y = totalThreadIndex + 1;
-    int z = 299;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int z = 9;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -1051,19 +1051,19 @@ __global__ void updateEdgeX2Z2(data d) {
 
 __global__ void updateEdgeZ1X1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
     int x = 0;
     int y = totalThreadIndex + 1;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -1110,19 +1110,19 @@ __global__ void updateEdgeZ1X1(data d) {
 
 __global__ void updateEdgeZ1X2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
-    int x = 299;
+    int x = 9;
     int y = totalThreadIndex + 1;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -1169,19 +1169,19 @@ __global__ void updateEdgeZ1X2(data d) {
 
 __global__ void updateEdgeZ2X1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
     int x = 0;
     int y = totalThreadIndex + 1;
-    int z = 299;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int z = 9;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -1228,19 +1228,19 @@ __global__ void updateEdgeZ2X1(data d) {
 
 __global__ void updateEdgeZ2X2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 298) return;
+    if(totalThreadIndex >= 8) return;
 
 
-    int x = 299;
+    int x = 9;
     int y = totalThreadIndex + 1;
-    int z = 299;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int z = 9;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -1290,13 +1290,13 @@ __global__ void updateCornerZ1X1Y1(data d) {
     int x = 0;
     int y = 0;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ypp = x + (y+2) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -1331,15 +1331,15 @@ __global__ void updateCornerZ1X1Y1(data d) {
 __global__ void updateCornerZ1X1Y2(data d) {
 
     int x = 0;
-    int y = 300 - 1;
+    int y = 10 - 1;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_ymm = x + (y-2) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -1373,16 +1373,16 @@ __global__ void updateCornerZ1X1Y2(data d) {
 
 __global__ void updateCornerZ1X2Y1(data d) {
 
-    int x = 300 - 1;
+    int x = 10 - 1;
     int y = 0;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ypp = x + (y+2) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -1416,16 +1416,16 @@ __global__ void updateCornerZ1X2Y1(data d) {
 
 __global__ void updateCornerZ1X2Y2(data d) {
 
-    int x = 300 - 1;
-    int y = 300 - 1;
+    int x = 10 - 1;
+    int y = 10 - 1;
     int z = 0;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_ymm = x + (y-2) * 300 + z * 300 * 300;
-    int index_zpp = x + y * 300 + (z+2) * 300 * 300;
-    int index_zp = x + y * 300 + (z+1) * 300 * 300;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
+    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
+    int index_zp = x + y * 10 + (z+1) * 10 * 10;
 
 
 
@@ -1461,14 +1461,14 @@ __global__ void updateCornerZ2X1Y1(data d) {
 
     int x = 0;
     int y = 0;
-    int z = 300 - 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ypp = x + (y+2) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int z = 10 - 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -1503,15 +1503,15 @@ __global__ void updateCornerZ2X1Y1(data d) {
 __global__ void updateCornerZ2X1Y2(data d) {
 
     int x = 0;
-    int y = 300 - 1;
-    int z = 300 - 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xpp = (x+2) + y * 300 + z * 300 * 300;
-    int index_xp = (x+1) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_ymm = x + (y-2) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int y = 10 - 1;
+    int z = 10 - 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
+    int index_xp = (x+1) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -1545,16 +1545,16 @@ __global__ void updateCornerZ2X1Y2(data d) {
 
 __global__ void updateCornerZ2X2Y1(data d) {
 
-    int x = 300 - 1;
+    int x = 10 - 1;
     int y = 0;
-    int z = 300 - 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ypp = x + (y+2) * 300 + z * 300 * 300;
-    int index_yp = x + (y+1) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int z = 10 - 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
+    int index_yp = x + (y+1) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -1588,16 +1588,16 @@ __global__ void updateCornerZ2X2Y1(data d) {
 
 __global__ void updateCornerZ2X2Y2(data d) {
 
-    int x = 300 - 1;
-    int y = 300 - 1;
-    int z = 300 - 1;
-    int index = x + y * 300 + z * 300 * 300;
-    int index_xm = (x-1) + y * 300 + z * 300 * 300;
-    int index_xmm = (x-2) + y * 300 + z * 300 * 300;
-    int index_ym = x + (y-1) * 300 + z * 300 * 300;
-    int index_ymm = x + (y-2) * 300 + z * 300 * 300;
-    int index_zm = x + y * 300 + (z-1) * 300 * 300;
-    int index_zmm = x + y * 300 + (z-2) * 300 * 300;
+    int x = 10 - 1;
+    int y = 10 - 1;
+    int z = 10 - 1;
+    int index = x + y * 10 + z * 10 * 10;
+    int index_xm = (x-1) + y * 10 + z * 10 * 10;
+    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
+    int index_ym = x + (y-1) * 10 + z * 10 * 10;
+    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
+    int index_zm = x + y * 10 + (z-1) * 10 * 10;
+    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
 
 
 
@@ -1631,25 +1631,25 @@ __global__ void updateCornerZ2X2Y2(data d) {
 
 
 void step(data d) {
-    updateCore<<<103374, 256>>>(d);
-    updateFaceX1<<<347, 256>>>(d);
-    updateFaceX2<<<347, 256>>>(d);
-    updateFaceY1<<<347, 256>>>(d);
-    updateFaceY2<<<347, 256>>>(d);
-    updateFaceZ1<<<347, 256>>>(d);
-    updateFaceZ2<<<347, 256>>>(d);
-    updateEdgeX1Y1<<<2, 256>>>(d);
-    updateEdgeX1Y2<<<2, 256>>>(d);
-    updateEdgeX2Y1<<<2, 256>>>(d);
-    updateEdgeX2Y2<<<2, 256>>>(d);
-    updateEdgeX1Z1<<<2, 256>>>(d);
-    updateEdgeX1Z2<<<2, 256>>>(d);
-    updateEdgeX2Z1<<<2, 256>>>(d);
-    updateEdgeX2Z2<<<2, 256>>>(d);
-    updateEdgeZ1X1<<<2, 256>>>(d);
-    updateEdgeZ1X2<<<2, 256>>>(d);
-    updateEdgeZ2X1<<<2, 256>>>(d);
-    updateEdgeZ2X2<<<2, 256>>>(d);
+    updateCore<<<3, 256>>>(d);
+    updateFaceX1<<<1, 256>>>(d);
+    updateFaceX2<<<1, 256>>>(d);
+    updateFaceY1<<<1, 256>>>(d);
+    updateFaceY2<<<1, 256>>>(d);
+    updateFaceZ1<<<1, 256>>>(d);
+    updateFaceZ2<<<1, 256>>>(d);
+    updateEdgeX1Y1<<<1, 256>>>(d);
+    updateEdgeX1Y2<<<1, 256>>>(d);
+    updateEdgeX2Y1<<<1, 256>>>(d);
+    updateEdgeX2Y2<<<1, 256>>>(d);
+    updateEdgeX1Z1<<<1, 256>>>(d);
+    updateEdgeX1Z2<<<1, 256>>>(d);
+    updateEdgeX2Z1<<<1, 256>>>(d);
+    updateEdgeX2Z2<<<1, 256>>>(d);
+    updateEdgeZ1X1<<<1, 256>>>(d);
+    updateEdgeZ1X2<<<1, 256>>>(d);
+    updateEdgeZ2X1<<<1, 256>>>(d);
+    updateEdgeZ2X2<<<1, 256>>>(d);
     updateCornerZ1X1Y1<<<1, 1>>>(d);
     updateCornerZ1X1Y2<<<1, 1>>>(d);
     updateCornerZ1X2Y1<<<1, 1>>>(d);

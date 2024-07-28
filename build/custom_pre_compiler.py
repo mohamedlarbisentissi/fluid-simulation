@@ -1,7 +1,9 @@
 import textwrap
 
-side = 300
 threadsPerBlock = 256
+
+with open('../params.cfg', 'r') as f:
+    side = int(f.readline())
 
 def generateListOfCases():
     cases = []

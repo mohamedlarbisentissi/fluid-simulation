@@ -20,23 +20,37 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+    // Initialize Three.js scene
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer();
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(0, 1, 1).normalize();
-    scene.add(light);
+    // Add ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Soft white light
+    scene.add(ambientLight);
+
+    // Add directional light from multiple directions
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight1.position.set(1, 1, 1).normalize();
+    scene.add(directionalLight1);
+
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight2.position.set(-1, -1, -1).normalize();
+    scene.add(directionalLight2);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.25;
     controls.enableZoom = true;
 
-    const gridHelper = new THREE.GridHelper(300, 300);
-    scene.add(gridHelper);
+    //const gridHelper = new THREE.GridHelper(300, 300);
+    //scene.add(gridHelper);
+
+    const axesHelper = new THREE.AxesHelper(150);
+    scene.add( axesHelper );
 
     camera.position.set(150, 150, 400);
     camera.lookAt(150, 150, 150);
@@ -45,8 +59,50 @@
     const timesteps = [];
     let currentTimestep = 0;
 
-    const pointsPerTimestep = 27e6;
-    const subsampleRate = 300; // Adjust based on performance
+    let side, pointsPerTimestep, valuesPerTimestep; // Pressure, u, v, w
+    const subsampleRate = 1; // Adjust based on performance
+
+    let points, colorAttribute;
+
+    // Fetch data, initialize scene, and update scene
+
+    fetch('params.cfg') // Path relative to your web server root
+      .then(response => response.text())
+      .then(data => {
+        side = parseInt(data);
+        pointsPerTimestep = side * side * side;
+        valuesPerTimestep = pointsPerTimestep * 4;
+      })
+      .then(
+        fetchBinaryData(dataUrl)
+          .then(data => {
+            console.log("Data fetched:", data.length); // Log fetched data length
+            console.log("Values per timestep:", valuesPerTimestep); // Log values per timestep
+            if (data) {
+              for (let i = 0; i < data.length; i += valuesPerTimestep) {
+                timesteps.push(data.slice(i, i + valuesPerTimestep));
+                console.log("Timestep", timesteps.length, "added at index ", i); // Log added timesteps
+              }
+              console.log("Timesteps processed:", timesteps.length); // Log processed timesteps count
+
+              initScene();
+              updateScene(timesteps[currentTimestep]);
+            } else {
+              console.error("No data to process");
+            }
+          })
+      )
+      .then(
+        setInterval(() => {
+          currentTimestep = (currentTimestep + 1) % timesteps.length;
+          if (timesteps.length > 0) {
+            updateScene(timesteps[currentTimestep]);
+          }
+        }, 1000)
+      ) // Update every 5 minutes
+      .catch(error => { console.error("Error fetching file:", error); });
+
+    // Function definitions
 
     async function fetchBinaryData(url) {
       try {
@@ -60,27 +116,37 @@
       }
     }
 
-    fetchBinaryData(dataUrl).then(data => {
-      if (data) {
-        const valuesPerTimestep = pointsPerTimestep * 4;
-        for (let i = 0; i < data.length; i += valuesPerTimestep) {
-          timesteps.push(data.slice(i, i + valuesPerTimestep));
-        }
-        console.log("Timesteps processed:", timesteps.length); // Log processed timesteps count
+    function initScene() {
+      const cubeGeometry = new THREE.BoxGeometry(side, side, side);
+      const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
+      const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
 
-        // Log some sample data for inspection
-        if (timesteps.length > 0) {
-          console.log("Sample timestep data (pressure):", timesteps[3].slice(0, 10));
-          console.log("Sample timestep data (u):", timesteps[3].slice(pointsPerTimestep, pointsPerTimestep + 10));
-          console.log("Sample timestep data (v):", timesteps[3].slice(2 * pointsPerTimestep, 2 * pointsPerTimestep + 10));
-          console.log("Sample timestep data (w):", timesteps[3].slice(3 * pointsPerTimestep, 3 * pointsPerTimestep + 10));
-        }
+      const geometry = new THREE.BufferGeometry();
+      const vertices = [];
+      const colors = new Float32Array(pointsPerTimestep * 3); // Preallocate array
 
-        updateScene(timesteps[currentTimestep]);
-      } else {
-        console.error("No data to process");
+      for (let i = 0; i < pointsPerTimestep; ++i) {
+        const x = i % side;
+        const y = Math.floor((i / side) % side);
+        const z = Math.floor(i / (side * side));
+
+        vertices.push(x, y, z);
       }
-    });
+
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+      colorAttribute = new THREE.Float32BufferAttribute(colors, 3);
+      geometry.setAttribute('color', colorAttribute);
+
+      const material = new THREE.PointsMaterial({
+        vertexColors: true,
+        size: 0.5,
+        transparent: true,
+        opacity: 0.5
+      });
+
+      points = new THREE.Points(geometry, material);
+      scene.add(points);
+    }
 
     function updateScene(timestepData) {
       if (!timestepData) {
@@ -88,66 +154,34 @@
         return;
       }
 
-      console.log("Updating scene with timestep data:", timestepData); // Log the timestep data
+      console.log("Updating scene with timestep data:", currentTimestep); // Log the timestep data
 
-      while (scene.children.length > 0) {
-        const obj = scene.children[0];
-        if (obj !== gridHelper && obj !== light) {
-          scene.remove(obj);
-        } else {
-          break;
-        }
-      }
+      const colors = colorAttribute.array;
 
-      const geometry = new THREE.BufferGeometry();
-      const vertices = [];
-      const colors = [];
-
-      for (let i = 0; i < pointsPerTimestep; i += subsampleRate) {
+      for (let i = 0; i < pointsPerTimestep; ++i) {
         const p = timestepData[i];
-        const u = timestepData[pointsPerTimestep + i];
-        const v = timestepData[2 * pointsPerTimestep + i];
-        const w = timestepData[3 * pointsPerTimestep + i];
-
-        const x = i % 300;
-        const y = Math.floor((i / 300) % 300);
-        const z = Math.floor(i / (300 * 300));
-
-        vertices.push(x, y, z);
-
         const color = getColorFromPressure(p);
-        colors.push(color.r, color.g, color.b);
-
-        const arrow = createArrow({ x, y, z }, { x: u, y: v, z: w });
-        scene.add(arrow);
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
       }
 
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-
-      const material = new THREE.PointsMaterial({ vertexColors: true, size: 0.1 });
-      const points = new THREE.Points(geometry, material);
-      scene.add(points);
+      colorAttribute.needsUpdate = true; // Inform Three.js to update the colors
     }
 
     function getColorFromPressure(pressure) {
+      if (isNaN(pressure) || pressure === Infinity || pressure === -Infinity || pressure === null) {
+        return new THREE.Color(1, 0, 1); // Bright magenta color for invalid values
+      }
       if (timesteps.length === 0) {
         console.error("No timesteps available to determine pressure range.");
         return new THREE.Color(0, 0, 0); // Return black color
       }
-      const minP = Math.min(...timesteps[0].slice(0, pointsPerTimestep));
-      const maxP = Math.max(...timesteps[0].slice(0, pointsPerTimestep));
+      const minP = 101325 * 0.9; // Assume 10% lower than atmospheric pressure
+      const maxP = 101325 * 1.1; // Assume 10% higher than atmospheric pressure
       const color = new THREE.Color();
       color.setHSL((pressure - minP) / (maxP - minP), 1.0, 0.5);
       return color;
-    }
-
-    function createArrow(position, velocity) {
-      const dir = new THREE.Vector3(velocity.x, velocity.y, velocity.z).normalize();
-      const origin = new THREE.Vector3(position.x, position.y, position.z);
-      const length = Math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2) / 10;
-      const hex = 0xffff00;
-      return new THREE.ArrowHelper(dir, origin, length, hex);
     }
 
     function animate() {
@@ -155,13 +189,6 @@
       controls.update();
       renderer.render(scene, camera);
     }
-
-    setInterval(() => {
-      currentTimestep = (currentTimestep + 1) % timesteps.length;
-      if (timesteps.length > 0) {
-        updateScene(timesteps[currentTimestep]);
-      }
-    }, 300);
 
     animate();
   </script>

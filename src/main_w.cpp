@@ -5,8 +5,8 @@
 #include "data_saver.h"
 
 int main() {
-    constexpr int side = 300;
-    constexpr int SAVE_EVERY = 300; //ms
+    constexpr int side = 10;
+    constexpr int SAVE_EVERY = 1; //ms
     constexpr int size = side * side * side;
     int t = 0;
     data d;
@@ -29,7 +29,7 @@ int main() {
     DataSaver dataSaver(side);
 
     init(numBlocks, threadsPerBlock, d, side);
-    while (t < 2000) {
+    while (t < 10) {
         std::cout << "t = " << t << std::endl;
         if (t % SAVE_EVERY == 0) {
             std::cout << "Saving data..." << std::endl;
