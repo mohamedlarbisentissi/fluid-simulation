@@ -382,17 +382,17 @@ def preCompile():
     kernels = generateListofKernels(cases)
     calls = generateListofCalls(cases)
 
-    with open('kernel.cu', 'r') as f:
+    with open('../src/kernel.cu', 'r') as f:
         kernelsFileContent = f.read()
-    newContent = kernelsFileContent.replace('// *** PYTHON CODE-GENERATED KERNEL DEFINITIONS ***', '\n\n'.join(kernels))
+    newContent = kernelsFileContent.replace('// *** PYTHON CODE-GENERATED KERNEL DEFINITIONS ***', ''.join(kernels))
     newContent = newContent.replace('// *** PYTHON CODE-GENERATED KERNEL CALLS ***', '\n'.join(calls))
-    with open('kernel_w.cu', 'w') as f:
+    with open('../src/kernel_w.cu', 'w') as f:
         f.write(newContent)
 
-    with open('main.cpp', 'r') as f:
+    with open('../src/main.cpp', 'r') as f:
         mainFileContent = f.read()
     newContent = mainFileContent.replace('// *** PYTHON CODE-GENERATED SIDE VALUE ***', f'constexpr int side = {side};')
-    with open('main_w.cpp', 'w') as f:
+    with open('../src/main_w.cpp', 'w') as f:
         f.write(newContent)
 
 

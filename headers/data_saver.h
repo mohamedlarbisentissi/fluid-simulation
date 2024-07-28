@@ -11,7 +11,7 @@ class DataSaver {
     float* v;
     float* w;
     std::ofstream file;
-    const std::string filename = "data.bin";
+    const std::string filename = "../output/data.bin";
 
 public:
     DataSaver(int side);

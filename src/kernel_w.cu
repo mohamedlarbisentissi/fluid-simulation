@@ -125,8 +125,6 @@ __global__ void updateCore(data d) {
 
 }
 
-
-
 __global__ void updateFaceX1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 88804) return;
@@ -199,8 +197,6 @@ __global__ void updateFaceX1(data d) {
     );
 
 }
-
-
 
 __global__ void updateFaceX2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -275,8 +271,6 @@ __global__ void updateFaceX2(data d) {
 
 }
 
-
-
 __global__ void updateFaceY1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 88804) return;
@@ -349,8 +343,6 @@ __global__ void updateFaceY1(data d) {
     );
 
 }
-
-
 
 __global__ void updateFaceY2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -425,8 +417,6 @@ __global__ void updateFaceY2(data d) {
 
 }
 
-
-
 __global__ void updateFaceZ1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 88804) return;
@@ -498,8 +488,6 @@ __global__ void updateFaceZ1(data d) {
     );
 
 }
-
-
 
 __global__ void updateFaceZ2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -573,8 +561,6 @@ __global__ void updateFaceZ2(data d) {
 
 }
 
-
-
 __global__ void updateEdgeX1Y1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 298) return;
@@ -634,8 +620,6 @@ __global__ void updateEdgeX1Y1(data d) {
     );
 
 }
-
-
 
 __global__ void updateEdgeX1Y2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -697,8 +681,6 @@ __global__ void updateEdgeX1Y2(data d) {
 
 }
 
-
-
 __global__ void updateEdgeX2Y1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 298) return;
@@ -758,8 +740,6 @@ __global__ void updateEdgeX2Y1(data d) {
     );
 
 }
-
-
 
 __global__ void updateEdgeX2Y2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -821,8 +801,6 @@ __global__ void updateEdgeX2Y2(data d) {
 
 }
 
-
-
 __global__ void updateEdgeX1Z1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 298) return;
@@ -881,8 +859,6 @@ __global__ void updateEdgeX1Z1(data d) {
     );
 
 }
-
-
 
 __global__ void updateEdgeX1Z2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -943,8 +919,6 @@ __global__ void updateEdgeX1Z2(data d) {
 
 }
 
-
-
 __global__ void updateEdgeX2Z1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 298) return;
@@ -1003,8 +977,6 @@ __global__ void updateEdgeX2Z1(data d) {
     );
 
 }
-
-
 
 __global__ void updateEdgeX2Z2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1065,8 +1037,6 @@ __global__ void updateEdgeX2Z2(data d) {
 
 }
 
-
-
 __global__ void updateEdgeZ1X1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 298) return;
@@ -1125,8 +1095,6 @@ __global__ void updateEdgeZ1X1(data d) {
     );
 
 }
-
-
 
 __global__ void updateEdgeZ1X2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1187,8 +1155,6 @@ __global__ void updateEdgeZ1X2(data d) {
 
 }
 
-
-
 __global__ void updateEdgeZ2X1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     if(totalThreadIndex >= 298) return;
@@ -1247,8 +1213,6 @@ __global__ void updateEdgeZ2X1(data d) {
     );
 
 }
-
-
 
 __global__ void updateEdgeZ2X2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1309,8 +1273,6 @@ __global__ void updateEdgeZ2X2(data d) {
 
 }
 
-
-
 __global__ void updateCornerZ1X1Y1(data d) {
 
     int x = 0;
@@ -1353,8 +1315,6 @@ __global__ void updateCornerZ1X1Y1(data d) {
     );
 
 }
-
-
 
 __global__ void updateCornerZ1X1Y2(data d) {
 
@@ -1399,8 +1359,6 @@ __global__ void updateCornerZ1X1Y2(data d) {
 
 }
 
-
-
 __global__ void updateCornerZ1X2Y1(data d) {
 
     int x = 300 - 1;
@@ -1443,8 +1401,6 @@ __global__ void updateCornerZ1X2Y1(data d) {
     );
 
 }
-
-
 
 __global__ void updateCornerZ1X2Y2(data d) {
 
@@ -1489,8 +1445,6 @@ __global__ void updateCornerZ1X2Y2(data d) {
 
 }
 
-
-
 __global__ void updateCornerZ2X1Y1(data d) {
 
     int x = 0;
@@ -1533,8 +1487,6 @@ __global__ void updateCornerZ2X1Y1(data d) {
     );
 
 }
-
-
 
 __global__ void updateCornerZ2X1Y2(data d) {
 
@@ -1579,8 +1531,6 @@ __global__ void updateCornerZ2X1Y2(data d) {
 
 }
 
-
-
 __global__ void updateCornerZ2X2Y1(data d) {
 
     int x = 300 - 1;
@@ -1623,8 +1573,6 @@ __global__ void updateCornerZ2X2Y1(data d) {
     );
 
 }
-
-
 
 __global__ void updateCornerZ2X2Y2(data d) {
 

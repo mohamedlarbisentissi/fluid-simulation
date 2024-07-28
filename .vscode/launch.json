@@ -8,7 +8,7 @@
             "name": "CUDA C++: Launch",
             "type": "cuda-gdb",
             "request": "launch",
-            "program": "${workspaceFolder}/fluid_sim",
+            "program": "${workspaceFolder}/exec/fluid_sim",
         },
         {
             "name": "CUDA C++: Attach",

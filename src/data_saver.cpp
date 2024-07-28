@@ -8,7 +8,7 @@ DataSaver::DataSaver(int side) : side(side) {
     u = new float[side * side * side];
     v = new float[side * side * side];
     w = new float[side * side * side];
-    file.open(filename, std::ios::binary | std::ios::app);
+    file.open(filename, std::ios::binary);
 }
 
 void DataSaver::saveData(int t, data d, int side) {
