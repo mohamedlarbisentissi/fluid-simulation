@@ -3,6 +3,9 @@
 # Run pre-compiler
 python3 ../build/custom_pre_compiler.py
 
+# Create exec directory
+mkdir -p ../exec
+
 # Build GPU code
 /usr/bin/nvcc -O3 -c ../src/kernel_w.cu -o ../exec/kernel.o -I../headers
 
