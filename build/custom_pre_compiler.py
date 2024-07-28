@@ -146,8 +146,8 @@ def getVelocityUpdateW(boundaryFlags):
 def getKernelBody(boundaryFlags):
     kernel_body = f"""
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;

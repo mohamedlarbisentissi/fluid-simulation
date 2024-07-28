@@ -1,0 +1,1 @@
+Check whether instability persists with realistic simulated space sizes

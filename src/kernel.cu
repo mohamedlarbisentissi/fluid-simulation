@@ -21,6 +21,14 @@ __global__ void initializeValues(data d, int side) {
     d.f2.u[index] = 0.0f;
     d.f2.v[index] = 0.0f;
     d.f2.w[index] = 0.0f;
+
+    /* Non-uniform ICs - pressure gradient in x-direction
+    int x = index % side;
+    int y = (index / side) % side;
+    int z = index / (side * side);
+    d.f1.p[index] = 101'325.0f - 1.0f * x / side;
+    d.f2.p[index] = 101'325.0f - 1.0f * x / side;*/
+    
 }
 
 void init(int numBlocks, int threadsPerBlock, data d, int side) {
@@ -30,7 +38,11 @@ void init(int numBlocks, int threadsPerBlock, data d, int side) {
 
 // Flip in main
 __global__ void flipInMainKernel(data d) {
-    *d.inMain = !*d.inMain;
+    if (*d.inMain) {
+        *d.inMain = false;
+    } else {
+        *d.inMain = true;
+    }
 }
 
 void flipInMain(data d) {

@@ -21,6 +21,14 @@ __global__ void initializeValues(data d, int side) {
     d.f2.u[index] = 0.0f;
     d.f2.v[index] = 0.0f;
     d.f2.w[index] = 0.0f;
+
+    /* Non-uniform ICs - pressure gradient in x-direction
+    int x = index % side;
+    int y = (index / side) % side;
+    int z = index / (side * side);
+    d.f1.p[index] = 101'325.0f - 1.0f * x / side;
+    d.f2.p[index] = 101'325.0f - 1.0f * x / side;*/
+    
 }
 
 void init(int numBlocks, int threadsPerBlock, data d, int side) {
@@ -30,7 +38,11 @@ void init(int numBlocks, int threadsPerBlock, data d, int side) {
 
 // Flip in main
 __global__ void flipInMainKernel(data d) {
-    *d.inMain = !*d.inMain;
+    if (*d.inMain) {
+        *d.inMain = false;
+    } else {
+        *d.inMain = true;
+    }
 }
 
 void flipInMain(data d) {
@@ -58,8 +70,8 @@ __global__ void updateCore(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -144,8 +156,8 @@ __global__ void updateFaceX1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -217,8 +229,8 @@ __global__ void updateFaceX2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -290,8 +302,8 @@ __global__ void updateFaceY1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -363,8 +375,8 @@ __global__ void updateFaceY2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -436,8 +448,8 @@ __global__ void updateFaceZ1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -508,8 +520,8 @@ __global__ void updateFaceZ2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -580,8 +592,8 @@ __global__ void updateEdgeX1Y1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -640,8 +652,8 @@ __global__ void updateEdgeX1Y2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -700,8 +712,8 @@ __global__ void updateEdgeX2Y1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -760,8 +772,8 @@ __global__ void updateEdgeX2Y2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -820,8 +832,8 @@ __global__ void updateEdgeX1Z1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -879,8 +891,8 @@ __global__ void updateEdgeX1Z2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -938,8 +950,8 @@ __global__ void updateEdgeX2Z1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -997,8 +1009,8 @@ __global__ void updateEdgeX2Z2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1056,8 +1068,8 @@ __global__ void updateEdgeZ1X1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1115,8 +1127,8 @@ __global__ void updateEdgeZ1X2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1174,8 +1186,8 @@ __global__ void updateEdgeZ2X1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1233,8 +1245,8 @@ __global__ void updateEdgeZ2X2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1289,8 +1301,8 @@ __global__ void updateCornerZ1X1Y1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1332,8 +1344,8 @@ __global__ void updateCornerZ1X1Y2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1375,8 +1387,8 @@ __global__ void updateCornerZ1X2Y1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1418,8 +1430,8 @@ __global__ void updateCornerZ1X2Y2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1461,8 +1473,8 @@ __global__ void updateCornerZ2X1Y1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1504,8 +1516,8 @@ __global__ void updateCornerZ2X1Y2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1547,8 +1559,8 @@ __global__ void updateCornerZ2X2Y1(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
@@ -1590,8 +1602,8 @@ __global__ void updateCornerZ2X2Y2(data d) {
 
 
     // Define origin and destination fields
-    field f1 = d.inMain ? d.f1 : d.f2;
-    field f2 = d.inMain ? d.f2 : d.f1;
+    field f1 = *d.inMain ? d.f1 : d.f2;
+    field f2 = *d.inMain ? d.f2 : d.f1;
 
     // Define dx, dt and RT
     float dx = *d.dx;
