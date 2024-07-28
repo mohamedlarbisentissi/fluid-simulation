@@ -6,7 +6,7 @@
 
 int main() {
     // *** PYTHON CODE-GENERATED SIDE VALUE ***
-    constexpr int SAVE_EVERY = 1; //ms
+    constexpr int SAVE_EVERY = 300; //ms
     constexpr int size = side * side * side;
     int t = 0;
     data d;
@@ -29,10 +29,10 @@ int main() {
     DataSaver dataSaver(side);
 
     init(numBlocks, threadsPerBlock, d, side);
-    while (t < 10) {
-        //std::cout << "t = " << t << std::endl;
+    while (t < 2000) {
+        std::cout << "t = " << t << std::endl;
         if (t % SAVE_EVERY == 0) {
-            //std::cout << "Saving data..." << std::endl;
+            std::cout << "Saving data..." << std::endl;
             dataSaver.saveData(t, d, side);
         }
         step(d);

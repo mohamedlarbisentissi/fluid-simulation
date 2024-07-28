@@ -22,12 +22,12 @@ __global__ void initializeValues(data d, int side) {
     d.f2.v[index] = 0.0f;
     d.f2.w[index] = 0.0f;
 
-    /* Non-uniform ICs - pressure gradient in x-direction
+    //Non-uniform ICs - pressure gradient in x-direction
     int x = index % side;
     int y = (index / side) % side;
     int z = index / (side * side);
-    d.f1.p[index] = 101'325.0f - 1.0f * x / side;
-    d.f2.p[index] = 101'325.0f - 1.0f * x / side;*/
+    d.f1.p[index] = 101'325.0f - 100.0f * x / side;
+    d.f2.p[index] = 101'325.0f - 100.0f * x / side;
     
 }
 
