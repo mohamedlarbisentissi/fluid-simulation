@@ -7,7 +7,7 @@ python3 ../build/custom_pre_compiler.py
 mkdir -p ../exec
 
 # Build GPU code
-/usr/bin/nvcc -O3 -c ../src/kernel_w.cu -o ../exec/kernel.o -I../headers
+/usr/bin/nvcc -O3 -G -c ../src/kernel_w.cu -o ../exec/kernel.o -I../headers
 
 # Build CPU code
 /usr/bin/g++ -O3 -c ../src/main_w.cpp -o ../exec/main.o -I../headers

@@ -6,10 +6,7 @@
 
 class DataSaver {
     int side;
-    float* p;
-    float* u;
-    float* v;
-    float* w;
+    data hd;
     std::ofstream file;
     const std::string filename = "../visualization/data.bin";
 

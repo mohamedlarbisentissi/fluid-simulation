@@ -48,9 +48,8 @@
 
     //const gridHelper = new THREE.GridHelper(300, 300);
     //scene.add(gridHelper);
-
-    const axesHelper = new THREE.AxesHelper(150);
-    scene.add( axesHelper );
+  
+    let axesHelper;
 
     camera.position.set(150, 150, 400);
     camera.lookAt(150, 150, 150);
@@ -72,6 +71,8 @@
         side = parseInt(data);
         pointsPerTimestep = side * side * side;
         valuesPerTimestep = pointsPerTimestep * 4;
+        axesHelper = new THREE.AxesHelper(side * 2);
+        scene.add(axesHelper);
       })
       .then(
         fetchBinaryData(dataUrl)
@@ -98,7 +99,7 @@
           if (timesteps.length > 0) {
             updateScene(timesteps[currentTimestep]);
           }
-        }, 1000)
+        }, 5000)
       ) // Update every 5 minutes
       .catch(error => { console.error("Error fetching file:", error); });
 

@@ -43,107 +43,307 @@ def generateListOfCases():
                     cases.append((face1[0] + face2[0] + face3[0], [face1[1][i] or face2[1][i] or face3[1][i] for i in range(6)]))
     return cases
 
-def getDeriv(field, deriv, boundaryFlags):
-    if deriv == 0:
-        if boundaryFlags[0]:
-            return f'({field}[index_xp] - {field}[index]) / dx'
-        elif boundaryFlags[1]:
-            return f'({field}[index] - {field}[index_xm]) / dx'
-        else:
-            return f'({field}[index_xp] - {field}[index_xm]) / (2 * dx)'
-    elif deriv == 1:
-        if boundaryFlags[2]:
-            return f'({field}[index_yp] - {field}[index]) / dx'
-        elif boundaryFlags[3]:
-            return f'({field}[index] - {field}[index_ym]) / dx'
-        else:
-            return f'({field}[index_yp] - {field}[index_ym]) / (2 * dx)'
-    elif deriv == 2:
-        if boundaryFlags[4]:
-            return f'({field}[index_zp] - {field}[index]) / dx'
-        elif boundaryFlags[5]:
-            return f'({field}[index] - {field}[index_zm]) / dx'
-        else:
-            return f'({field}[index_zp] - {field}[index_zm]) / (2 * dx)'
-    elif deriv == 3:
-        if boundaryFlags[0]:
-            return f'({field}[index_xpp] - 2 * {field}[index_xp] + {field}[index]) / (dx * dx)'
-        elif boundaryFlags[1]:
-            return f'({field}[index] - 2 * {field}[index_xm] + {field}[index_xmm]) / (dx * dx)'
-        else:
-            return f'({field}[index_xp] - 2 * {field}[index] + {field}[index_xm]) / (dx * dx)'
-    elif deriv == 4:
-        if boundaryFlags[2]:
-            return f'({field}[index_ypp] - 2 * {field}[index_yp] + {field}[index]) / (dx * dx)'
-        elif boundaryFlags[3]:
-            return f'({field}[index] - 2 * {field}[index_ym] + {field}[index_ymm]) / (dx * dx)'
-        else:
-            return f'({field}[index_yp] - 2 * {field}[index] + {field}[index_ym]) / (dx * dx)'
-    elif deriv == 5:
-        if boundaryFlags[4]:
-            return f'({field}[index_zpp] - 2 * {field}[index_zp] + {field}[index]) / (dx * dx)'
-        elif boundaryFlags[5]:
-            return f'({field}[index] - 2 * {field}[index_zm] + {field}[index_zmm]) / (dx * dx)'
-        else:
-            return f'({field}[index_zp] - 2 * {field}[index] + {field}[index_zm]) / (dx * dx)'
+def getFaceSpeed(component, delta):
+    return f'(0.5 * (f1.{component}[index{delta}] + f1.{component}[index]))'
+
+def getMassUpdate(boundaryFlags):
+    update = f"""
+    f2.m[index] = f1.m[index] + dt/dx * (
+    """
+    if not boundaryFlags[0]:
+        update += \
+        f"""
+        + {getFaceSpeed('u', '-1')} * ({getFaceSpeed('u', '-1')} > 0 ? f1.m[index_xm] : f1.m[index])
+        """
+    if not boundaryFlags[1]:
+        update += \
+        f"""
+        - {getFaceSpeed('u', '+1')} * ({getFaceSpeed('u', '+1')} > 0 ? f1.m[index] : f1.m[index_xp])
+        """
+    if not boundaryFlags[2]:
+        update += \
+        f"""
+        + {getFaceSpeed('v', '-1')} * ({getFaceSpeed('v', '-1')} > 0 ? f1.m[index_ym] : f1.m[index])
+        """
+    if not boundaryFlags[3]:
+        update += \
+        f"""
+        - {getFaceSpeed('v', '+1')} * ({getFaceSpeed('v', '+1')} > 0 ? f1.m[index] : f1.m[index_yp])
+        """
+    if not boundaryFlags[4]:
+        update += \
+        f"""
+        + {getFaceSpeed('w', '-1')} * ({getFaceSpeed('w', '-1')} > 0 ? f1.m[index_zm] : f1.m[index])
+        """
+    if not boundaryFlags[5]:
+        update += \
+        f"""
+        - {getFaceSpeed('w', '+1')} * ({getFaceSpeed('w', '+1')} > 0 ? f1.m[index] : f1.m[index_zp])
+        """
+    update += """
+    );"""
+    return update
 
 def getVelocityUpdateU(boundaryFlags):
     if boundaryFlags[0] or boundaryFlags[1]:
         return 'f2.u[index] = 0;'
     else:
-        return f"""
-    f2.u[index] = f1.u[index] + dt *
-    (
-        - f1.u[index] * {getDeriv('f1.u', 0, boundaryFlags)}
-        - f1.v[index] * {getDeriv('f1.u', 1, boundaryFlags)}
-        - f1.w[index] * {getDeriv('f1.u', 2, boundaryFlags)}
-        - (RT/f1.p[index]) * {getDeriv('f1.p', 0, boundaryFlags)}
-        + mu * (RT/f1.p[index]) * (
-            {getDeriv('f1.u', 3, boundaryFlags)} +
-            {getDeriv('f1.u', 4, boundaryFlags)} +
-            {getDeriv('f1.u', 5, boundaryFlags)}
+        update = f"""
+    f2.u[index] = (f1.m[index] * f1.u[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+    """
+    if not boundaryFlags[0]:
+        update += \
+        f"""
+            + {getFaceSpeed('u', '-1')} * ({getFaceSpeed('u', '-1')} > 0 ? (f1.m[index_xm] * f1.u[index_xm]) : (f1.m[index] * f1.u[index]))
+        """
+    if not boundaryFlags[1]:
+        update += \
+        f"""
+            - {getFaceSpeed('u', '+1')} * ({getFaceSpeed('u', '+1')} > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_xp] * f1.u[index_xp]))
+        """
+    if not boundaryFlags[2]:
+        update += \
+        f"""
+            + {getFaceSpeed('v', '-1')} * ({getFaceSpeed('v', '-1')} > 0 ? (f1.m[index_ym] * f1.u[index_ym]) : (f1.m[index] * f1.u[index]))
+        """
+    if not boundaryFlags[3]:
+        update += \
+        f"""
+            - {getFaceSpeed('v', '+1')} * ({getFaceSpeed('v', '+1')} > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_yp] * f1.u[index_yp]))
+        """
+    if not boundaryFlags[4]:
+        update += \
+        f"""
+            + {getFaceSpeed('w', '-1')} * ({getFaceSpeed('w', '-1')} > 0 ? (f1.m[index_zm] * f1.u[index_zm]) : (f1.m[index] * f1.u[index]))
+        """
+    if not boundaryFlags[5]:
+        update += \
+        f"""
+            - {getFaceSpeed('w', '+1')} * ({getFaceSpeed('w', '+1')} > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_zp] * f1.u[index_zp]))
+        """
+    update += """
+        ) - (RT/dx) * (
+    """
+    if not boundaryFlags[0]:
+        update += \
+        f"""
+            + f1.m[index_xm]
+        """
+    if not boundaryFlags[1]:
+        update += \
+        f"""
+            - f1.m[index_xp]
+        """
+    update += """
+        ) + dx * mu * (
+    """
+    if not boundaryFlags[0]:
+        update += \
+        f"""
+            + (f1.u[index_xm] - f1.u[index])
+        """
+    if not boundaryFlags[1]:
+        update += \
+        f"""
+            + (f1.u[index_xp] - f1.u[index])
+        """
+    if not boundaryFlags[2]:
+        update += \
+        f"""
+            + (f1.u[index_ym] - f1.u[index])
+        """
+    if not boundaryFlags[3]:
+        f"""
+            + (f1.u[index_yp] - f1.u[index])
+        """
+    if not boundaryFlags[4]:
+        f"""
+            + (f1.u[index_zm] - f1.u[index])
+        """
+    if not boundaryFlags[5]:
+        f"""
+            + (f1.u[index_zp] - f1.u[index])
+        """
+    update += """
         )
     );
     """
+    return update
 
 def getVelocityUpdateV(boundaryFlags):
     if boundaryFlags[2] or boundaryFlags[3]:
         return 'f2.v[index] = 0;'
     else:
-        return f"""
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * {getDeriv('f1.v', 0, boundaryFlags)}
-        - f1.v[index] * {getDeriv('f1.v', 1, boundaryFlags)}
-        - f1.w[index] * {getDeriv('f1.v', 2, boundaryFlags)}
-        - (RT/f1.p[index]) * {getDeriv('f1.p', 1, boundaryFlags)}
-        + mu * (RT/f1.p[index]) * (
-            {getDeriv('f1.v', 3, boundaryFlags)} +
-            {getDeriv('f1.v', 4, boundaryFlags)} +
-            {getDeriv('f1.v', 5, boundaryFlags)}
+        update = f"""
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+    """
+    if not boundaryFlags[0]:
+        update += \
+        f"""
+            + {getFaceSpeed('u', '-1')} * ({getFaceSpeed('u', '-1')} > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+        """
+    if not boundaryFlags[1]:
+        update += \
+        f"""
+            - {getFaceSpeed('u', '+1')} * ({getFaceSpeed('u', '+1')} > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+        """
+    if not boundaryFlags[2]:
+        update += \
+        f"""
+            + {getFaceSpeed('v', '-1')} * ({getFaceSpeed('v', '-1')} > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+        """
+    if not boundaryFlags[3]:
+        update += \
+        f"""
+            - {getFaceSpeed('v', '+1')} * ({getFaceSpeed('v', '+1')} > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+        """
+    if not boundaryFlags[4]:
+        update += \
+        f"""
+            + {getFaceSpeed('w', '-1')} * ({getFaceSpeed('w', '-1')} > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+        """
+    if not boundaryFlags[5]:
+        update += \
+        f"""
+            - {getFaceSpeed('w', '+1')} * ({getFaceSpeed('w', '+1')} > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+        """
+    update += """
+        ) - (RT/dx) * (
+    """
+    if not boundaryFlags[2]:
+        update += \
+        f"""
+            + f1.m[index_ym]
+        """
+    if not boundaryFlags[3]:
+        update += \
+        f"""
+            - f1.m[index_yp]
+        """
+    update += """
+        ) + dx * mu * (
+    """
+    if not boundaryFlags[0]:
+        update += \
+        f"""
+            + (f1.v[index_xm] - f1.v[index])
+        """
+    if not boundaryFlags[1]:
+        update += \
+        f"""
+            + (f1.v[index_xp] - f1.v[index])
+        """
+    if not boundaryFlags[2]:
+        update += \
+        f"""
+            + (f1.v[index_ym] - f1.v[index])
+        """
+    if not boundaryFlags[3]:
+        f"""
+            + (f1.v[index_yp] - f1.v[index])
+        """
+    if not boundaryFlags[4]:
+        f"""
+            + (f1.v[index_zm] - f1.v[index])
+        """
+    if not boundaryFlags[5]:
+        f"""
+            + (f1.v[index_zp] - f1.v[index])
+        """
+    update += """
         )
     );
     """
+    return update
 
 def getVelocityUpdateW(boundaryFlags):
     if boundaryFlags[4] or boundaryFlags[5]:
         return 'f2.w[index] = 0;'
     else:
-        return f"""
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * {getDeriv('f1.w', 0, boundaryFlags)}
-        - f1.v[index] * {getDeriv('f1.w', 1, boundaryFlags)}
-        - f1.w[index] * {getDeriv('f1.w', 2, boundaryFlags)}
-        - (RT/f1.p[index]) * {getDeriv('f1.p', 2, boundaryFlags)}
-        + mu * (RT/f1.p[index]) * (
-            {getDeriv('f1.w', 3, boundaryFlags)} +
-            {getDeriv('f1.w', 4, boundaryFlags)} +
-            {getDeriv('f1.w', 5, boundaryFlags)}
-        )
-        - g
+        update = f"""
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+    """
+    if not boundaryFlags[0]:
+        update += \
+        f"""
+            + {getFaceSpeed('u', '-1')} * ({getFaceSpeed('u', '-1')} > 0 ? (f1.m[index_xm] * f1.w[index_xm]) : (f1.m[index] * f1.w[index]))
+        """
+    if not boundaryFlags[1]:
+        update += \
+        f"""
+            - {getFaceSpeed('u', '+1')} * ({getFaceSpeed('u', '+1')} > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_xp] * f1.w[index_xp]))
+        """
+    if not boundaryFlags[2]:
+        update += \
+        f"""
+            + {getFaceSpeed('v', '-1')} * ({getFaceSpeed('v', '-1')} > 0 ? (f1.m[index_ym] * f1.w[index_ym]) : (f1.m[index] * f1.w[index]))
+        """
+    if not boundaryFlags[3]:
+        update += \
+        f"""
+            - {getFaceSpeed('v', '+1')} * ({getFaceSpeed('v', '+1')} > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_yp] * f1.w[index_yp]))
+        """
+    if not boundaryFlags[4]:
+        update += \
+        f"""
+            + {getFaceSpeed('w', '-1')} * ({getFaceSpeed('w', '-1')} > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+        """
+    if not boundaryFlags[5]:
+        update += \
+        f"""
+            - {getFaceSpeed('w', '+1')} * ({getFaceSpeed('w', '+1')} > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+        """
+    update += """
+        ) - (RT/dx) * (
+    """
+    if not boundaryFlags[4]:
+        update += \
+        f"""
+            + f1.m[index_zm]
+        """
+    if not boundaryFlags[5]:
+        update += \
+        f"""
+            - f1.m[index_zp]
+        """
+    update += """
+        ) + dx * mu * (
+    """
+    if not boundaryFlags[0]:
+        update += \
+        f"""
+            + (f1.w[index_xm] - f1.w[index])
+        """
+    if not boundaryFlags[1]:
+        update += \
+        f"""
+            + (f1.w[index_xp] - f1.w[index])
+        """
+    if not boundaryFlags[2]:
+        update += \
+        f"""
+            + (f1.w[index_ym] - f1.w[index])
+        """
+    if not boundaryFlags[3]:
+        f"""
+            + (f1.w[index_yp] - f1.w[index])
+        """
+    if not boundaryFlags[4]:
+        f"""
+            + (f1.w[index_zm] - f1.w[index])
+        """
+    if not boundaryFlags[5]:
+        f"""
+            + (f1.w[index_zp] - f1.w[index])
+        """
+    update += """
+        ) + f1.m[index] * g
     );
     """
+    return update
 
 def getKernelBody(boundaryFlags):
     kernel_body = f"""
@@ -158,20 +358,12 @@ def getKernelBody(boundaryFlags):
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+    {getMassUpdate(boundaryFlags)}
     // Update velocity field
     {getVelocityUpdateU(boundaryFlags)}
     {getVelocityUpdateV(boundaryFlags)}
     {getVelocityUpdateW(boundaryFlags)}
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        {getDeriv('f1.u', 0, boundaryFlags)} * f1.p[index] +
-        {getDeriv('f1.p', 0, boundaryFlags)} * f1.u[index] +
-        {getDeriv('f1.v', 1, boundaryFlags)} * f1.p[index] +
-        {getDeriv('f1.p', 1, boundaryFlags)} * f1.v[index] +
-        {getDeriv('f1.w', 2, boundaryFlags)} * f1.p[index] +
-        {getDeriv('f1.p', 2, boundaryFlags)} * f1.w[index]
-    );
     """
     kernel_body = textwrap.dedent(kernel_body)    
     kernel_body = textwrap.indent(kernel_body, ' ' * 8)
@@ -211,15 +403,11 @@ def getIndexExpressions(side, boundaryFlags):
         f'int index_yp = x + (y+1) * {side} + z * {side} * {side};',
         f'int index_zm = x + y * {side} + (z-1) * {side} * {side};',
         f'int index_zp = x + y * {side} + (z+1) * {side} * {side};']
+    finalExpressions = []
     for i, flag in enumerate(boundaryFlags):
-        if flag:
-            if i % 2 == 0:
-                initialExpressions[i] = initialExpressions[i].replace('m', 'pp')
-                initialExpressions[i] = initialExpressions[i].replace('-1', '+2')
-            else:
-                initialExpressions[i] = initialExpressions[i].replace('p', 'mm')
-                initialExpressions[i] = initialExpressions[i].replace('+1', '-2')
-    finalExpressions = '\n'.join(initialExpressions)
+        if not flag:
+            finalExpressions.append(initialExpressions[i])
+    finalExpressions = '\n'.join(finalExpressions)
     return textwrap.indent(finalExpressions, ' ' * 8)
 
 def getFaceIndexing(face, side, faceSide, boundaryFlags):
@@ -396,6 +584,5 @@ def preCompile():
     newContent = mainFileContent.replace('// *** PYTHON CODE-GENERATED SIDE VALUE ***', f'constexpr int side = {side};')
     with open('../src/main_w.cpp', 'w') as f:
         f.write(newContent)
-
 
 preCompile()

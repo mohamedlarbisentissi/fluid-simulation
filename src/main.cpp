@@ -15,11 +15,11 @@ int main() {
     cudaMalloc(&d.RT, size * sizeof(float));
     cudaMalloc(&d.mu, size * sizeof(float));
     cudaMalloc(&d.g, size * sizeof(float));
-    cudaMalloc(&d.f1.p, size * sizeof(float));
+    cudaMalloc(&d.f1.m, size * sizeof(float));
     cudaMalloc(&d.f1.u, size * sizeof(float));
     cudaMalloc(&d.f1.v, size * sizeof(float));
     cudaMalloc(&d.f1.w, size * sizeof(float));
-    cudaMalloc(&d.f2.p, size * sizeof(float));
+    cudaMalloc(&d.f2.m, size * sizeof(float));
     cudaMalloc(&d.f2.u, size * sizeof(float));
     cudaMalloc(&d.f2.v, size * sizeof(float));
     cudaMalloc(&d.f2.w, size * sizeof(float));
@@ -29,7 +29,7 @@ int main() {
     DataSaver dataSaver(side);
 
     init(numBlocks, threadsPerBlock, d, side);
-    while (t < 10) {
+    while (t < 20) {
         std::cout << "t = " << t << std::endl;
         if (t % SAVE_EVERY == 0) {
             std::cout << "Saving data..." << std::endl;
@@ -43,8 +43,13 @@ int main() {
     cudaFree(d.dx);
     cudaFree(d.dt);
     cudaFree(d.RT);
+    cudaFree(d.mu);
+    cudaFree(d.g);
+    cudaFree(d.f1.m);
+    cudaFree(d.f1.u);
+    cudaFree(d.f1.v);
     cudaFree(d.f1.w);
-    cudaFree(d.f2.p);
+    cudaFree(d.f2.m);
     cudaFree(d.f2.u);
     cudaFree(d.f2.v);
     cudaFree(d.f2.w);

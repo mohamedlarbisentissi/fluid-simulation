@@ -2,7 +2,7 @@
 #define STRUCTS_H
 
 struct field {
-    float* p;
+    float* m;
     float* u;
     float* v;
     float* w;

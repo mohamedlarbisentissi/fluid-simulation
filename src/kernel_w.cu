@@ -1,34 +1,48 @@
 #include <cuda_runtime.h>
+#include <iostream>
 #include "structs.h"
 
 // Intialize values
 __global__ void initializeValues(data d, int side) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if(index >= side * side * side) return;
+
+    constexpr float g = 9.81f;
+    constexpr float P0 = 101'325.0f;
+    constexpr float T0 = 288.15f;
+    constexpr float R = 287.05f;
+    const float dx = 1e-3f;
+
     if (index == 0) {
-        *d.dx = 1e-3f;
-        *d.dt = 1e-3f;
-        *d.RT = 2494.2f;
+        *d.dx = dx;
+        *d.dt = 1e-4f;
+        *d.RT = R*T0;
         *d.mu = 1.8e-5f;
-        *d.g = 9.81f;
+        *d.g = g;
         *d.inMain = false;
     }
-    d.f1.p[index] = 101'325.0f;
+    // Max allowable speed for stable simulation is ~10m/s if dx = 1e-3 and dt = 1e-4
+
+    // ICs
+    int z_index = index / (side * side);
+    float z = z_index * dx;
+    d.f1.m[index] = P0 * dx * dx * dx / (R * T0);
     d.f1.u[index] = 0.0f;
     d.f1.v[index] = 0.0f;
     d.f1.w[index] = 0.0f;
-    d.f2.p[index] = 101'325.0f;
+    d.f2.m[index] = P0 * dx * dx * dx / (R * T0);
     d.f2.u[index] = 0.0f;
     d.f2.v[index] = 0.0f;
     d.f2.w[index] = 0.0f;
 
     //Non-uniform ICs - pressure gradient in x-direction
+    /*
     int x = index % side;
     int y = (index / side) % side;
     int z = index / (side * side);
     d.f1.p[index] = 101'325.0f - 100.0f * x / side;
     d.f2.p[index] = 101'325.0f - 100.0f * x / side;
-    
+    */
 }
 
 void init(int numBlocks, int threadsPerBlock, data d, int side) {
@@ -54,19 +68,19 @@ void flipInMain(data d) {
 
 __global__ void updateCore(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 512) return;
+    if(totalThreadIndex >= 1) return;
 
     // Compute indices
-    int x = (totalThreadIndex % 8) + 1;
-    int y = ((totalThreadIndex / 8) % 8) + 1;
-    int z = (totalThreadIndex / (8 * 8)) + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int x = (totalThreadIndex % 1) + 1;
+    int y = ((totalThreadIndex / 1) % 1) + 1;
+    int z = (totalThreadIndex / (1 * 1)) + 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
     // Define origin and destination fields
@@ -80,78 +94,140 @@ __global__ void updateCore(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
 
-    f2.u[index] = f1.u[index] + dt *
-    (
-        - f1.u[index] * (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.u[index_yp] - f1.u[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.u[index_zp] - f1.u[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.u[index_xp] - 2 * f1.u[index] + f1.u[index_xm]) / (dx * dx) +
-            (f1.u[index_yp] - 2 * f1.u[index] + f1.u[index_ym]) / (dx * dx) +
-            (f1.u[index_zp] - 2 * f1.u[index] + f1.u[index_zm]) / (dx * dx)
+    f2.u[index] = (f1.m[index] * f1.u[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.u[index_xm]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_xp] * f1.u[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.u[index_ym]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_yp] * f1.u[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.u[index_zm]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_zp] * f1.u[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_xm]
+
+            - f1.m[index_xp]
+
+        ) + dx * mu * (
+
+            + (f1.u[index_xm] - f1.u[index])
+
+            + (f1.u[index_xp] - f1.u[index])
+
+            + (f1.u[index_ym] - f1.u[index])
+
         )
     );
 
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index_xp] - f1.v[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index_zp] - f1.v[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index_xp] - 2 * f1.v[index] + f1.v[index_xm]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index_zp] - 2 * f1.v[index] + f1.v[index_zm]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xm] - f1.v[index])
+
+            + (f1.v[index_xp] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index_xp] - f1.w[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.w[index_yp] - f1.w[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index_xp] - 2 * f1.w[index] + f1.w[index_xm]) / (dx * dx) +
-            (f1.w[index_yp] - 2 * f1.w[index] + f1.w[index_ym]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.w[index_xm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_xp] * f1.w[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.w[index_ym]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_yp] * f1.w[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xm] - f1.w[index])
+
+            + (f1.w[index_xp] - f1.w[index])
+
+            + (f1.w[index_ym] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx) * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateFaceX1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 64) return;
+    if(totalThreadIndex >= 1) return;
 
 
     int x = 0;
-    int y = (totalThreadIndex % 8) + 1;
-    int z = ((totalThreadIndex / 8) % 8) + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int y = (totalThreadIndex % 1) + 1;
+    int z = ((totalThreadIndex / 1) % 1) + 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -166,65 +242,98 @@ __global__ void updateFaceX1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index_xp] - f1.v[index]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index_zp] - f1.v[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index_xpp] - 2 * f1.v[index_xp] + f1.v[index]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index_zp] - 2 * f1.v[index] + f1.v[index_zm]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xp] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index_xp] - f1.w[index]) / dx
-        - f1.v[index] * (f1.w[index_yp] - f1.w[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index_xpp] - 2 * f1.w[index_xp] + f1.w[index]) / (dx * dx) +
-            (f1.w[index_yp] - 2 * f1.w[index] + f1.w[index_ym]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_xp] * f1.w[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.w[index_ym]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_yp] * f1.w[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xp] - f1.w[index])
+
+            + (f1.w[index_ym] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateFaceX2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 64) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = 9;
-    int y = (totalThreadIndex % 8) + 1;
-    int z = ((totalThreadIndex / 8) % 8) + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int x = 2;
+    int y = (totalThreadIndex % 1) + 1;
+    int z = ((totalThreadIndex / 1) % 1) + 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -239,65 +348,98 @@ __global__ void updateFaceX2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index] - f1.v[index_xm]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index_zp] - f1.v[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index] - 2 * f1.v[index_xm] + f1.v[index_xmm]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index_zp] - 2 * f1.v[index] + f1.v[index_zm]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xm] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index] - f1.w[index_xm]) / dx
-        - f1.v[index] * (f1.w[index_yp] - f1.w[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index] - 2 * f1.w[index_xm] + f1.w[index_xmm]) / (dx * dx) +
-            (f1.w[index_yp] - 2 * f1.w[index] + f1.w[index_ym]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.w[index_xm]) : (f1.m[index] * f1.w[index]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.w[index_ym]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_yp] * f1.w[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xm] - f1.w[index])
+
+            + (f1.w[index_ym] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateFaceY1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 64) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = (totalThreadIndex % 8) + 1;
+    int x = (totalThreadIndex % 1) + 1;
     int y = 0;
-    int z = ((totalThreadIndex / 8) % 8) + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int z = ((totalThreadIndex / 1) % 1) + 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -312,65 +454,98 @@ __global__ void updateFaceY1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
 
-    f2.u[index] = f1.u[index] + dt *
-    (
-        - f1.u[index] * (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.u[index_yp] - f1.u[index]) / dx
-        - f1.w[index] * (f1.u[index_zp] - f1.u[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.u[index_xp] - 2 * f1.u[index] + f1.u[index_xm]) / (dx * dx) +
-            (f1.u[index_ypp] - 2 * f1.u[index_yp] + f1.u[index]) / (dx * dx) +
-            (f1.u[index_zp] - 2 * f1.u[index] + f1.u[index_zm]) / (dx * dx)
+    f2.u[index] = (f1.m[index] * f1.u[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.u[index_xm]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_xp] * f1.u[index_xp]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_yp] * f1.u[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.u[index_zm]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_zp] * f1.u[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_xm]
+
+            - f1.m[index_xp]
+
+        ) + dx * mu * (
+
+            + (f1.u[index_xm] - f1.u[index])
+
+            + (f1.u[index_xp] - f1.u[index])
+
         )
     );
 
     f2.v[index] = 0;
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index_xp] - f1.w[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.w[index_yp] - f1.w[index]) / dx
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index_xp] - 2 * f1.w[index] + f1.w[index_xm]) / (dx * dx) +
-            (f1.w[index_ypp] - 2 * f1.w[index_yp] + f1.w[index]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.w[index_xm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_xp] * f1.w[index_xp]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_yp] * f1.w[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xm] - f1.w[index])
+
+            + (f1.w[index_xp] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx) * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index]) / dx * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateFaceY2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 64) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = (totalThreadIndex % 8) + 1;
-    int y = 9;
-    int z = ((totalThreadIndex / 8) % 8) + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int x = (totalThreadIndex % 1) + 1;
+    int y = 2;
+    int z = ((totalThreadIndex / 1) % 1) + 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -385,65 +560,102 @@ __global__ void updateFaceY2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
 
-    f2.u[index] = f1.u[index] + dt *
-    (
-        - f1.u[index] * (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.u[index] - f1.u[index_ym]) / dx
-        - f1.w[index] * (f1.u[index_zp] - f1.u[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.u[index_xp] - 2 * f1.u[index] + f1.u[index_xm]) / (dx * dx) +
-            (f1.u[index] - 2 * f1.u[index_ym] + f1.u[index_ymm]) / (dx * dx) +
-            (f1.u[index_zp] - 2 * f1.u[index] + f1.u[index_zm]) / (dx * dx)
+    f2.u[index] = (f1.m[index] * f1.u[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.u[index_xm]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_xp] * f1.u[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.u[index_ym]) : (f1.m[index] * f1.u[index]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.u[index_zm]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_zp] * f1.u[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_xm]
+
+            - f1.m[index_xp]
+
+        ) + dx * mu * (
+
+            + (f1.u[index_xm] - f1.u[index])
+
+            + (f1.u[index_xp] - f1.u[index])
+
+            + (f1.u[index_ym] - f1.u[index])
+
         )
     );
 
     f2.v[index] = 0;
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index_xp] - f1.w[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.w[index] - f1.w[index_ym]) / dx
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index_xp] - 2 * f1.w[index] + f1.w[index_xm]) / (dx * dx) +
-            (f1.w[index] - 2 * f1.w[index_ym] + f1.w[index_ymm]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.w[index_xm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_xp] * f1.w[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.w[index_ym]) : (f1.m[index] * f1.w[index]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xm] - f1.w[index])
+
+            + (f1.w[index_xp] - f1.w[index])
+
+            + (f1.w[index_ym] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx) * f1.u[index] +
-        (f1.v[index] - f1.v[index_ym]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_ym]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateFaceZ1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 64) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = (totalThreadIndex % 8) + 1;
-    int y = ((totalThreadIndex / 8) % 8) + 1;
+    int x = (totalThreadIndex % 1) + 1;
+    int y = ((totalThreadIndex / 1) % 1) + 1;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -458,64 +670,102 @@ __global__ void updateFaceZ1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
 
-    f2.u[index] = f1.u[index] + dt *
-    (
-        - f1.u[index] * (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.u[index_yp] - f1.u[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.u[index_zp] - f1.u[index]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.u[index_xp] - 2 * f1.u[index] + f1.u[index_xm]) / (dx * dx) +
-            (f1.u[index_yp] - 2 * f1.u[index] + f1.u[index_ym]) / (dx * dx) +
-            (f1.u[index_zpp] - 2 * f1.u[index_zp] + f1.u[index]) / (dx * dx)
+    f2.u[index] = (f1.m[index] * f1.u[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.u[index_xm]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_xp] * f1.u[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.u[index_ym]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_yp] * f1.u[index_yp]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_zp] * f1.u[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_xm]
+
+            - f1.m[index_xp]
+
+        ) + dx * mu * (
+
+            + (f1.u[index_xm] - f1.u[index])
+
+            + (f1.u[index_xp] - f1.u[index])
+
+            + (f1.u[index_ym] - f1.u[index])
+
         )
     );
 
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index_xp] - f1.v[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index_zp] - f1.v[index]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index_xp] - 2 * f1.v[index] + f1.v[index_xm]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index_zpp] - 2 * f1.v[index_zp] + f1.v[index]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xm] - f1.v[index])
+
+            + (f1.v[index_xp] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx) * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateFaceZ2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 64) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = (totalThreadIndex % 8) + 1;
-    int y = ((totalThreadIndex / 8) % 8) + 1;
-    int z = 9;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int x = (totalThreadIndex % 1) + 1;
+    int y = ((totalThreadIndex / 1) % 1) + 1;
+    int z = 2;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -530,64 +780,101 @@ __global__ void updateFaceZ2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
 
-    f2.u[index] = f1.u[index] + dt *
-    (
-        - f1.u[index] * (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.u[index_yp] - f1.u[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.u[index] - f1.u[index_zm]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.u[index_xp] - 2 * f1.u[index] + f1.u[index_xm]) / (dx * dx) +
-            (f1.u[index_yp] - 2 * f1.u[index] + f1.u[index_ym]) / (dx * dx) +
-            (f1.u[index] - 2 * f1.u[index_zm] + f1.u[index_zmm]) / (dx * dx)
+    f2.u[index] = (f1.m[index] * f1.u[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.u[index_xm]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_xp] * f1.u[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.u[index_ym]) : (f1.m[index] * f1.u[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.u[index]) : (f1.m[index_yp] * f1.u[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.u[index_zm]) : (f1.m[index] * f1.u[index]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_xm]
+
+            - f1.m[index_xp]
+
+        ) + dx * mu * (
+
+            + (f1.u[index_xm] - f1.u[index])
+
+            + (f1.u[index_xp] - f1.u[index])
+
+            + (f1.u[index_ym] - f1.u[index])
+
         )
     );
 
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index_xp] - f1.v[index_xm]) / (2 * dx)
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index] - f1.v[index_zm]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index_xp] - 2 * f1.v[index] + f1.v[index_xm]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index] - 2 * f1.v[index_zm] + f1.v[index_zmm]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xm] - f1.v[index])
+
+            + (f1.v[index_xp] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index_xm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index_xm]) / (2 * dx) * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeX1Y1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
     int x = 0;
     int y = 0;
     int z = totalThreadIndex + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -602,52 +889,63 @@ __global__ void updateEdgeX1Y1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index_xp] - f1.w[index]) / dx
-        - f1.v[index] * (f1.w[index_yp] - f1.w[index]) / dx
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index_xpp] - 2 * f1.w[index_xp] + f1.w[index]) / (dx * dx) +
-            (f1.w[index_ypp] - 2 * f1.w[index_yp] + f1.w[index]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_xp] * f1.w[index_xp]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_yp] * f1.w[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xp] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index]) / dx * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeX1Y2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
     int x = 0;
-    int y = 9;
+    int y = 2;
     int z = totalThreadIndex + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -662,52 +960,65 @@ __global__ void updateEdgeX1Y2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index_xp] - f1.w[index]) / dx
-        - f1.v[index] * (f1.w[index] - f1.w[index_ym]) / dx
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index_xpp] - 2 * f1.w[index_xp] + f1.w[index]) / (dx * dx) +
-            (f1.w[index] - 2 * f1.w[index_ym] + f1.w[index_ymm]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_xp] * f1.w[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.w[index_ym]) : (f1.m[index] * f1.w[index]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xp] - f1.w[index])
+
+            + (f1.w[index_ym] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index] - f1.v[index_ym]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_ym]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeX2Y1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = 9;
+    int x = 2;
     int y = 0;
     int z = totalThreadIndex + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -722,52 +1033,63 @@ __global__ void updateEdgeX2Y1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index] - f1.w[index_xm]) / dx
-        - f1.v[index] * (f1.w[index_yp] - f1.w[index]) / dx
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index] - 2 * f1.w[index_xm] + f1.w[index_xmm]) / (dx * dx) +
-            (f1.w[index_ypp] - 2 * f1.w[index_yp] + f1.w[index]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.w[index_xm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_yp] * f1.w[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xm] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index]) / dx * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeX2Y2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = 9;
-    int y = 9;
+    int x = 2;
+    int y = 2;
     int z = totalThreadIndex + 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -782,52 +1104,65 @@ __global__ void updateEdgeX2Y2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
 
-    f2.w[index] = f1.w[index] + dt *
-    (
-        - f1.u[index] * (f1.w[index] - f1.w[index_xm]) / dx
-        - f1.v[index] * (f1.w[index] - f1.w[index_ym]) / dx
-        - f1.w[index] * (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx)
-        - (RT/f1.p[index]) * (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.w[index] - 2 * f1.w[index_xm] + f1.w[index_xmm]) / (dx * dx) +
-            (f1.w[index] - 2 * f1.w[index_ym] + f1.w[index_ymm]) / (dx * dx) +
-            (f1.w[index_zp] - 2 * f1.w[index] + f1.w[index_zm]) / (dx * dx)
-        )
-        - g
+    f2.w[index] = (f1.m[index] * f1.w[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.w[index_xm]) : (f1.m[index] * f1.w[index]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.w[index_ym]) : (f1.m[index] * f1.w[index]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.w[index_zm]) : (f1.m[index] * f1.w[index]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.w[index]) : (f1.m[index_zp] * f1.w[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_zm]
+
+            - f1.m[index_zp]
+
+        ) + dx * mu * (
+
+            + (f1.w[index_xm] - f1.w[index])
+
+            + (f1.w[index_ym] - f1.w[index])
+
+        ) + f1.m[index] * g
     );
 
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index] - f1.v[index_ym]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_ym]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index_zm]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index_zm]) / (2 * dx) * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeX1Z1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
     int x = 0;
     int y = totalThreadIndex + 1;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -842,51 +1177,65 @@ __global__ void updateEdgeX1Z1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index_xp] - f1.v[index]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index_zp] - f1.v[index]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index_xpp] - 2 * f1.v[index_xp] + f1.v[index]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index_zpp] - 2 * f1.v[index_zp] + f1.v[index]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xp] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeX1Z2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
     int x = 0;
     int y = totalThreadIndex + 1;
-    int z = 9;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int z = 2;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -901,51 +1250,65 @@ __global__ void updateEdgeX1Z2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index_xp] - f1.v[index]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index] - f1.v[index_zm]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index_xpp] - 2 * f1.v[index_xp] + f1.v[index]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index] - 2 * f1.v[index_zm] + f1.v[index_zmm]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xp] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeX2Z1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = 9;
+    int x = 2;
     int y = totalThreadIndex + 1;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -960,51 +1323,65 @@ __global__ void updateEdgeX2Z1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index] - f1.v[index_xm]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index_zp] - f1.v[index]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index] - 2 * f1.v[index_xm] + f1.v[index_xmm]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index_zpp] - 2 * f1.v[index_zp] + f1.v[index]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xm] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeX2Z2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = 9;
+    int x = 2;
     int y = totalThreadIndex + 1;
-    int z = 9;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int z = 2;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -1019,51 +1396,65 @@ __global__ void updateEdgeX2Z2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index] - f1.v[index_xm]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index] - f1.v[index_zm]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index] - 2 * f1.v[index_xm] + f1.v[index_xmm]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index] - 2 * f1.v[index_zm] + f1.v[index_zmm]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xm] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeZ1X1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
     int x = 0;
     int y = totalThreadIndex + 1;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -1078,51 +1469,65 @@ __global__ void updateEdgeZ1X1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index_xp] - f1.v[index]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index_zp] - f1.v[index]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index_xpp] - 2 * f1.v[index_xp] + f1.v[index]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index_zpp] - 2 * f1.v[index_zp] + f1.v[index]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xp] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeZ1X2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = 9;
+    int x = 2;
     int y = totalThreadIndex + 1;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -1137,51 +1542,65 @@ __global__ void updateEdgeZ1X2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index] - f1.v[index_xm]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index_zp] - f1.v[index]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index] - 2 * f1.v[index_xm] + f1.v[index_xmm]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index_zpp] - 2 * f1.v[index_zp] + f1.v[index]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_zp] * f1.v[index_zp]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xm] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeZ2X1(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
     int x = 0;
     int y = totalThreadIndex + 1;
-    int z = 9;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int z = 2;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -1196,51 +1615,65 @@ __global__ void updateEdgeZ2X1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index_xp] - f1.v[index]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index] - f1.v[index_zm]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index_xpp] - 2 * f1.v[index_xp] + f1.v[index]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index] - 2 * f1.v[index_zm] + f1.v[index_zmm]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_xp] * f1.v[index_xp]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xp] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateEdgeZ2X2(data d) {
     int totalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    if(totalThreadIndex >= 8) return;
+    if(totalThreadIndex >= 1) return;
 
 
-    int x = 9;
+    int x = 2;
     int y = totalThreadIndex + 1;
-    int z = 9;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int z = 2;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -1255,33 +1688,49 @@ __global__ void updateEdgeZ2X2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
 
-    f2.v[index] = f1.v[index] + dt *
-    (
-        - f1.u[index] * (f1.v[index] - f1.v[index_xm]) / dx
-        - f1.v[index] * (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx)
-        - f1.w[index] * (f1.v[index] - f1.v[index_zm]) / dx
-        - (RT/f1.p[index]) * (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx)
-        + mu * (RT/f1.p[index]) * (
-            (f1.v[index] - 2 * f1.v[index_xm] + f1.v[index_xmm]) / (dx * dx) +
-            (f1.v[index_yp] - 2 * f1.v[index] + f1.v[index_ym]) / (dx * dx) +
-            (f1.v[index] - 2 * f1.v[index_zm] + f1.v[index_zmm]) / (dx * dx)
+    f2.v[index] = (f1.m[index] * f1.v[index]) / f2.m[index] + (dt / f2.m[index]) * (
+        (1/dx) * (
+
+            + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? (f1.m[index_xm] * f1.v[index_xm]) : (f1.m[index] * f1.v[index]))
+
+            + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? (f1.m[index_ym] * f1.v[index_ym]) : (f1.m[index] * f1.v[index]))
+
+            - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? (f1.m[index] * f1.v[index]) : (f1.m[index_yp] * f1.v[index_yp]))
+
+            + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? (f1.m[index_zm] * f1.v[index_zm]) : (f1.m[index] * f1.v[index]))
+
+        ) - (RT/dx) * (
+
+            + f1.m[index_ym]
+
+            - f1.m[index_yp]
+
+        ) + dx * mu * (
+
+            + (f1.v[index_xm] - f1.v[index])
+
+            + (f1.v[index_ym] - f1.v[index])
+
         )
     );
 
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index_ym]) / (2 * dx) * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index_ym]) / (2 * dx) * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
@@ -1290,13 +1739,10 @@ __global__ void updateCornerZ1X1Y1(data d) {
     int x = 0;
     int y = 0;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -1311,35 +1757,33 @@ __global__ void updateCornerZ1X1Y1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index]) / dx * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateCornerZ1X1Y2(data d) {
 
     int x = 0;
-    int y = 10 - 1;
+    int y = 3 - 1;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -1354,35 +1798,33 @@ __global__ void updateCornerZ1X1Y2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index] - f1.v[index_ym]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_ym]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateCornerZ1X2Y1(data d) {
 
-    int x = 10 - 1;
+    int x = 3 - 1;
     int y = 0;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -1397,35 +1839,33 @@ __global__ void updateCornerZ1X2Y1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index]) / dx * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateCornerZ1X2Y2(data d) {
 
-    int x = 10 - 1;
-    int y = 10 - 1;
+    int x = 3 - 1;
+    int y = 3 - 1;
     int z = 0;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
-    int index_zpp = x + y * 10 + (z+2) * 10 * 10;
-    int index_zp = x + y * 10 + (z+1) * 10 * 10;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_zp = x + y * 3 + (z+1) * 3 * 3;
 
 
 
@@ -1440,20 +1880,21 @@ __global__ void updateCornerZ1X2Y2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        - (0.5 * (f1.w[index+1] + f1.w[index])) * ((0.5 * (f1.w[index+1] + f1.w[index])) > 0 ? f1.m[index] : f1.m[index_zp])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index] - f1.v[index_ym]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_ym]) / dx * f1.v[index] +
-        (f1.w[index_zp] - f1.w[index]) / dx * f1.p[index] +
-        (f1.p[index_zp] - f1.p[index]) / dx * f1.w[index]
-    );
 
 }
 
@@ -1461,14 +1902,11 @@ __global__ void updateCornerZ2X1Y1(data d) {
 
     int x = 0;
     int y = 0;
-    int z = 10 - 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int z = 3 - 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -1483,35 +1921,33 @@ __global__ void updateCornerZ2X1Y1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index]) / dx * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index]) / dx * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateCornerZ2X1Y2(data d) {
 
     int x = 0;
-    int y = 10 - 1;
-    int z = 10 - 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xpp = (x+2) + y * 10 + z * 10 * 10;
-    int index_xp = (x+1) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int y = 3 - 1;
+    int z = 3 - 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xp = (x+1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -1526,35 +1962,33 @@ __global__ void updateCornerZ2X1Y2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        - (0.5 * (f1.u[index+1] + f1.u[index])) * ((0.5 * (f1.u[index+1] + f1.u[index])) > 0 ? f1.m[index] : f1.m[index_xp])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index_xp] - f1.u[index]) / dx * f1.p[index] +
-        (f1.p[index_xp] - f1.p[index]) / dx * f1.u[index] +
-        (f1.v[index] - f1.v[index_ym]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_ym]) / dx * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateCornerZ2X2Y1(data d) {
 
-    int x = 10 - 1;
+    int x = 3 - 1;
     int y = 0;
-    int z = 10 - 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ypp = x + (y+2) * 10 + z * 10 * 10;
-    int index_yp = x + (y+1) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int z = 3 - 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_yp = x + (y+1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -1569,35 +2003,33 @@ __global__ void updateCornerZ2X2Y1(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        - (0.5 * (f1.v[index+1] + f1.v[index])) * ((0.5 * (f1.v[index+1] + f1.v[index])) > 0 ? f1.m[index] : f1.m[index_yp])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index_yp] - f1.v[index]) / dx * f1.p[index] +
-        (f1.p[index_yp] - f1.p[index]) / dx * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
 __global__ void updateCornerZ2X2Y2(data d) {
 
-    int x = 10 - 1;
-    int y = 10 - 1;
-    int z = 10 - 1;
-    int index = x + y * 10 + z * 10 * 10;
-    int index_xm = (x-1) + y * 10 + z * 10 * 10;
-    int index_xmm = (x-2) + y * 10 + z * 10 * 10;
-    int index_ym = x + (y-1) * 10 + z * 10 * 10;
-    int index_ymm = x + (y-2) * 10 + z * 10 * 10;
-    int index_zm = x + y * 10 + (z-1) * 10 * 10;
-    int index_zmm = x + y * 10 + (z-2) * 10 * 10;
+    int x = 3 - 1;
+    int y = 3 - 1;
+    int z = 3 - 1;
+    int index = x + y * 3 + z * 3 * 3;
+    int index_xm = (x-1) + y * 3 + z * 3 * 3;
+    int index_ym = x + (y-1) * 3 + z * 3 * 3;
+    int index_zm = x + y * 3 + (z-1) * 3 * 3;
 
 
 
@@ -1612,26 +2044,27 @@ __global__ void updateCornerZ2X2Y2(data d) {
     float mu = *d.mu;
     float g = *d.g;
 
+    // Update mass field
+
+    f2.m[index] = f1.m[index] + dt/dx * (
+
+        + (0.5 * (f1.u[index-1] + f1.u[index])) * ((0.5 * (f1.u[index-1] + f1.u[index])) > 0 ? f1.m[index_xm] : f1.m[index])
+
+        + (0.5 * (f1.v[index-1] + f1.v[index])) * ((0.5 * (f1.v[index-1] + f1.v[index])) > 0 ? f1.m[index_ym] : f1.m[index])
+
+        + (0.5 * (f1.w[index-1] + f1.w[index])) * ((0.5 * (f1.w[index-1] + f1.w[index])) > 0 ? f1.m[index_zm] : f1.m[index])
+
+    );
     // Update velocity field
     f2.u[index] = 0;
     f2.v[index] = 0;
     f2.w[index] = 0;
-    // Update pressure field
-    f2.p[index] = f1.p[index] - (dt) * 
-    (
-        (f1.u[index] - f1.u[index_xm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_xm]) / dx * f1.u[index] +
-        (f1.v[index] - f1.v[index_ym]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_ym]) / dx * f1.v[index] +
-        (f1.w[index] - f1.w[index_zm]) / dx * f1.p[index] +
-        (f1.p[index] - f1.p[index_zm]) / dx * f1.w[index]
-    );
 
 }
 
 
 void step(data d) {
-    updateCore<<<3, 256>>>(d);
+    updateCore<<<1, 256>>>(d);
     updateFaceX1<<<1, 256>>>(d);
     updateFaceX2<<<1, 256>>>(d);
     updateFaceY1<<<1, 256>>>(d);
