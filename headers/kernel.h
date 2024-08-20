@@ -5,7 +5,7 @@
 
 void init(int numBlocks, int threadsPerBlock, data d, int side);
 
-void step(data d);
+void step(int numBlocks, int threadsPerBlock, data d, int side, float& dt);
 
 void flipInMain(data d);
 

@@ -6,15 +6,17 @@
 
 int main() {
     // *** PYTHON CODE-GENERATED SIDE VALUE ***
-    constexpr int SAVE_EVERY = 1; //ms
+    constexpr int SAVE_EVERY = 300; //ms
     constexpr int size = side * side * side;
-    int t = 0;
+    float t = 0.0f;
     data d;
     cudaMalloc(&d.dx, sizeof(float));
     cudaMalloc(&d.dt, sizeof(float));
     cudaMalloc(&d.RT, size * sizeof(float));
     cudaMalloc(&d.mu, size * sizeof(float));
     cudaMalloc(&d.g, size * sizeof(float));
+    cudaMalloc(&d.small_dt, sizeof(float));
+    d.okayStep.resize(size);
     cudaMalloc(&d.f1.m, size * sizeof(float));
     cudaMalloc(&d.f1.u, size * sizeof(float));
     cudaMalloc(&d.f1.v, size * sizeof(float));
@@ -29,15 +31,16 @@ int main() {
     DataSaver dataSaver(side);
 
     init(numBlocks, threadsPerBlock, d, side);
-    while (t < 20) {
+    while (t < 1) {
         std::cout << "t = " << t << std::endl;
-        if (t % SAVE_EVERY == 0) {
+        if (static_cast<int>(t/1e-3) % SAVE_EVERY == 0) {
             std::cout << "Saving data..." << std::endl;
             dataSaver.saveData(t, d, side);
         }
-        step(d);
+        float dt;
+        step(numBlocks, threadsPerBlock, d, side, dt);
         flipInMain(d);
-        t++;
+        t += dt;
     }
 
     cudaFree(d.dx);
@@ -45,6 +48,7 @@ int main() {
     cudaFree(d.RT);
     cudaFree(d.mu);
     cudaFree(d.g);
+    cudaFree(d.small_dt);
     cudaFree(d.f1.m);
     cudaFree(d.f1.u);
     cudaFree(d.f1.v);

@@ -16,9 +16,6 @@ void DataSaver::saveData(int t, data d, int side) {
     cudaMemcpy(hd.f1.u, d.f1.u, side * side * side * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(hd.f1.v, d.f1.v, side * side * side * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(hd.f1.w, d.f1.w, side * side * side * sizeof(float), cudaMemcpyDeviceToHost);
-    for (int i = 0; i < side * side * side; i++) {
-        std::cout << hd.f1.m[i] << " " << hd.f1.u[i] << " " << hd.f1.v[i] << " " << hd.f1.w[i] << std::endl;
-    }
     file.write(reinterpret_cast<char*>(hd.f1.m), side * side * side * sizeof(float));
     file.write(reinterpret_cast<char*>(hd.f1.u), side * side * side * sizeof(float));
     file.write(reinterpret_cast<char*>(hd.f1.v), side * side * side * sizeof(float));
